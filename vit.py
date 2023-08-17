@@ -22,10 +22,10 @@ class VitInputLayer(nn.Module):
     """
 
     def __init__(self,
-        in_channels  : int = 3,
-        emb_dim      : int = 384,
-        num_patch_row: int = 2,
-        image_size   : int = 32,
+                 in_channels  : int = 3,
+                 emb_dim      : int = 384,
+                 num_patch_row: int = 2,
+                 image_size   : int = 32,
         ):
         """モジュールの部品の定義
         --
@@ -118,13 +118,39 @@ class VitInputLayer(nn.Module):
         z_0 += self.pos_emb
 
         return z_0
-    
+
+
+class MultiHeadSelfAttention(nn.Module):
+    """
+    Multi-Head Self-Attentionの実装
+        - 埋め込み
+        - 内積
+        - 加重和
+    """
+
+    def __init__(self,
+                 emb_dim: int = 384,
+                 head   : int = 3,
+                 dropout: float = 0,
+        ):
+        """
+        Parameters
+        ----------
+        `emb_dim` : `int`
+            埋め込み後のベクトルの長さ
+        `head` : `int`
+            ヘッドの数
+        `dropout` : `float`
+            ドロップアウト率
+        """
+
+
 if __name__ == "__main__":
+    # Input Layerの確認
     batch_size, channel, height, width = 2, 3, 32, 32
     x = torch.randn(batch_size, channel, height, width)
     print(x.shape)
     input_layer = VitInputLayer(in_channels=channel, image_size=height)
     print(input_layer)
     z_0 = input_layer(x)  # input_layer.forward(x)とした場合と同じ挙動 なぜ？
-
     print(z_0.shape)
