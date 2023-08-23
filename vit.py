@@ -9,6 +9,7 @@ ViTの構成要素
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class VitInputLayer(nn.Module):
@@ -91,6 +92,7 @@ class VitInputLayer(nn.Module):
         `x` : `torch.Tensor`
             入力画像。形状は、(B, C, H, W)\n
             B: バッチサイズ、C: チャンネル数、H: 高さ、W: 幅
+
         Returns
         -------
         `z_0` : `torch.Tensor`
@@ -142,15 +144,100 @@ class MultiHeadSelfAttention(nn.Module):
             ヘッドの数
         `dropout` : `float`
             ドロップアウト率
+
+        Returns
+        -------
+        None
         """
 
+        super(MultiHeadSelfAttention, self).__init__()
+        self.emb_dim = emb_dim
+        self.head_dim = emb_dim // head
+        self.head = head
+        self.sqrt_dh = self.head_dim ** 0.5  # D_hの二乗根。qk^Tを割るための係数
+
+        # 入力をq、k、vに埋め込むための線形層
+        self.w_q = nn.Linear(emb_dim, emb_dim, bias=False)
+        self.w_k = nn.Linear(emb_dim, emb_dim, bias=False)
+        self.w_v = nn.Linear(emb_dim, emb_dim, bias=False)
+
+        self.attn_drop = nn.Dropout(p=dropout)  # ドロップアウト層
+
+        # Multi-Head Self-Attentionの結果を出力に埋め込むための線形層
+        self.w_o = nn.Sequential(
+            nn.Linear(emb_dim, emb_dim),
+            nn.Dropout(dropout)
+        )
+    
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        """
+        Parameters
+        ----------
+        `z` : `torch.Tensor`
+            Multi-Head Self-Attentionへの入力。形状は、(B, N, D)\n
+            B: バッチサイズ、N: トークン数、D: ベクトル長
+
+        Returns
+        -------
+        `out` : `torch.Tensor`
+            Multi-Head Self-Attentionの出力。形状は、(B, N, D)\n
+            B: バッチサイズ、N: トークン数、D: 埋め込みベクトルの長さ
+        """
+
+        batch_size, num_patch, _ = z.size()
+
+        # Self-Attentionの埋め込み
+        # (B, N, D) -> (B, N, D)
+        q = self.w_q(z)
+        k = self.w_k(z)
+        v = self.w_v(z)
+
+        # q、k、vをヘッドに分ける
+        # ベクトルをヘッドの個数（h）に分ける
+        # (B, N, D) -> (B, N, h, D//h)
+        q = q.view(batch_size, num_patch, self.head, self.head_dim)  # *.view(): Tensorの次元操作
+        k = k.view(batch_size, num_patch, self.head, self.head_dim)
+        v = v.view(batch_size, num_patch, self.head, self.head_dim)
+        # Self-Attentionのために、(B, N, h, D//h) -> (B, h, N, D//h)
+        q = q.transpose(1, 2)
+        k = k.transpose(1, 2)
+        v = v.transpose(1, 2)
+
+        # Self-Attentionの内積
+        # (B, h, N, D//h) -> (B, h, D//h, N)
+        k_T = k.transpose(2, 3)
+        # (B, h, N, D//h) * (B, h, D//h, N) -> (B, h, N, N)
+        dots = (q @ k_T) / self.sqrt_dh
+        # 列方向にソフトマックス関数
+        attn = F.softmax(dots, dim=-1)
+        # ドロップアウト
+        attn = self.attn_drop(attn)
+
+        # Self-Attentionの加重和
+        # (B, h, N, N) * (B, h, N, D//h) -> (B, h, N, D//h)
+        out = attn @ v
+        # (B, h, N, D//h) -> (B, N, h, D//h)
+        out = out.transpose(1, 2)
+        # (B, N, h, D//h) -> (B, N, D)
+        out = out.reshape(batch_size, num_patch, self.emb_dim)
+
+        # 出力層
+        # (B, N, D) -> (B, N, D)
+        out = self.w_o(out)
+        return out
 
 if __name__ == "__main__":
     # Input Layerの確認
     batch_size, channel, height, width = 2, 3, 32, 32
     x = torch.randn(batch_size, channel, height, width)
-    print(x.shape)
+    print("入力:", x.shape, "\n")
     input_layer = VitInputLayer(in_channels=channel, image_size=height)
     print(input_layer)
     z_0 = input_layer(x)  # input_layer.forward(x)とした場合と同じ挙動 なぜ？
-    print(z_0.shape)
+    print("Input Layerの出力形状:               ", z_0.shape,"\n")
+
+    # Multi-Head Self-Attentionの確認
+    mhsa = MultiHeadSelfAttention()
+    print(mhsa)
+    out = mhsa(z_0) # (B, N, D)
+    print("Multi-Head Self-Attentionの出力形状: ", out.shape)
