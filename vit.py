@@ -133,7 +133,7 @@ class MultiHeadSelfAttention(nn.Module):
     def __init__(self,
                  emb_dim: int = 384,
                  head   : int = 3,
-                 dropout: float = 0,
+                 dropout: float = 0.,
         ):
         """
         Parameters
@@ -298,6 +298,110 @@ class VitEncoderBlock(nn.Module):
         # Encder Blockの後半部分
         out = self.mlp(self.ln2(out)) + out
         return out
+    
+
+class Vit(nn.Module):
+        """
+        Vision Transformerの実装
+            - Input Layer
+            - Encoder
+                - Encoder Block
+            - MLP Head
+        """
+        def __init__(self,
+                     in_channels   : int = 3,
+                     num_classes   : int = 10,
+                     emb_dim       : int = 384,
+                     num_patch_row : int = 2,
+                     image_size    : int = 32,
+                     num_blocks    : int = 7,
+                     head          : int = 8,
+                     hidden_dim    : int = 384 * 4,
+                     dropout       : float = 0.
+            ):
+            """
+            Parameters
+            ----------
+            `in_channels` : `int`
+                入力画像のチャンネル数
+            `num_classes` : `int`
+                画像分類のクラス数
+            `emb_dim` : `int`
+                埋め込み後のベクトルの長さ
+            `num_patch_row` : `int`
+                1辺のパッチの長さ
+            `image_size` : `int`
+                入力画像の1辺の大きさ。入力画像の高さと幅は同じであると仮定
+            `num_blocks` : `int`
+                Encoder Blockの数
+            `head` : `int`
+                ヘッドの数
+            `hidden_dim` : `int`
+                Encoder BlockのMLPにおける中間層のベクトルの長さ
+            `dropout` : `float`
+                ドロップアウト率
+            
+            Returns
+            -------
+            None
+            """
+            
+            super(Vit, self).__init__()
+
+            # Input Layer
+            self.input_layer = VitInputLayer(
+                in_channels=in_channels,
+                emb_dim=emb_dim,
+                num_patch_row=num_patch_row,
+                image_size=image_size
+            )
+
+            # Encoder
+            # Encoder Blockを多段に重ねる
+            self.encoder = nn.Sequential(*[
+                VitEncoderBlock(
+                    emb_dim=emb_dim,
+                    head=head,
+                    hidden_dim=hidden_dim,
+                    dropout=dropout
+                )
+                for _ in range(num_blocks)])  # *はアンパック
+            
+            # MLP Head
+            self.mlp_head = nn.Sequential(
+                nn.LayerNorm(emb_dim),
+                nn.Linear(emb_dim, num_classes)
+            )
+        
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            """
+            Parameters
+            ----------
+            `x` : `torch.Tensor`
+                ViTへの入力画像。形状は、(B, C, H, W)\n
+                B: バッチサイズ、C: チャンネル数、H: 高さ、W: 幅
+
+            Returns
+            -------
+            `out` : `torch.Tensor`
+                ViTの出力。形状は、(B, M)\n
+                B: バッチサイズ、M: クラス数
+            """
+
+            # Input Layer
+            # (B, C, H, W) -> (B, N, D)
+            # N: トークン数（パッチ数+1）、D: ベクトルの長さ
+            out = self.input_layer(x)
+            # Encoder
+            # (B, N, D) -> (B, N, D)
+            out = self.encoder(out)
+            # クラストークンのみ抜き出す
+            # (B, N, D) -> (B, D)
+            cls_token = out[:, 0]
+            # MLP Head
+            # (B, D) -> (B, M)
+            pred = self.mlp_head(cls_token)
+            return pred
 
 if __name__ == "__main__":
     # Input Layerの確認
@@ -320,3 +424,13 @@ if __name__ == "__main__":
     print(vit_enc)
     z_1 = vit_enc(z_0)  # z_0は(B, N, D)
     print("Encoder Blockの出力形状: ", z_1.shape, "\n")
+    print("-" * 50, "\n")
+
+    # ViTの実装の確認
+    num_classes = 10
+    batch_size, channel, height, width = 2, 3, 32, 32
+    x = torch.randn(batch_size, channel, height, width)
+    vit = Vit(in_channels=channel, num_classes=num_classes)
+    pred = vit(x)
+
+    print("ViTの出力形状: ", pred.shape)  # (2, 10)(=(B, M))
