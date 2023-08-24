@@ -225,6 +225,79 @@ class MultiHeadSelfAttention(nn.Module):
         # (B, N, D) -> (B, N, D)
         out = self.w_o(out)
         return out
+    
+
+class VitEncoderBlock(nn.Module):
+    """
+    Encoder Blockの実装
+        - Multi-Head Self-Attention + Layer Normalization
+        - MLP + Layer Normalization
+    """
+
+    def __init__(self,
+                 emb_dim   : int = 384,
+                 head      : int = 8,
+                 hidden_dim: int = 384 * 4,
+                 dropout   : float = 0.,
+        ):
+        """
+        Parameters
+        ----------
+        `emb_dim` : `int`
+            埋め込み後のベクトルの長さ
+        `head` : `int`
+            ヘッドの数
+        `hidden_dim` : `int`
+            Encoder BlockのMLPにおける中間層のベクトルの長さ\n
+            原論文に従ってemb_dimの4倍をデフォルト値に 
+        `dropout` : `float`
+            ドロップアウト率
+
+        Returns
+        -------
+        None
+        """
+
+        super(VitEncoderBlock, self).__init__()
+        # 1つ目のLayer Normalization
+        self.ln1 = nn.LayerNorm(emb_dim)
+        # Multi-Head Self-Attention
+        self.msa = MultiHeadSelfAttention(
+            emb_dim=emb_dim,
+            head=head,
+            dropout=dropout
+        )
+        # 2つ目のLayer Normalization
+        self.ln2 = nn.LayerNorm(emb_dim)
+        # MLP
+        self.mlp = nn.Sequential(
+            nn.Linear(emb_dim, hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, emb_dim),
+            nn.Dropout(dropout)
+        )
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        """
+        Parameters
+        ----------
+        `z` : `torch.Tensor`
+            Encoder Blockへの入力。形状は、(B, N, D)\n
+            B: バッチサイズ、N: トークン数、D: ベクトルの長さ
+
+        Returns
+        -------
+        `out` : `torch.Tensor`
+            Encoder Blockの出力。形状は、(B, N, D)\n
+            B: バッチサイズ、N: トークン数、D: 埋め込みベクトルの長さ
+        """
+
+        # Encoder Blockの前半部分
+        out = self.msa(self.ln1(z)) + z
+        # Encder Blockの後半部分
+        out = self.mlp(self.ln2(out)) + out
+        return out
 
 if __name__ == "__main__":
     # Input Layerの確認
@@ -234,10 +307,16 @@ if __name__ == "__main__":
     input_layer = VitInputLayer(in_channels=channel, image_size=height)
     print(input_layer)
     z_0 = input_layer(x)  # input_layer.forward(x)とした場合と同じ挙動 なぜ？
-    print("Input Layerの出力形状:               ", z_0.shape,"\n")
+    print("Input Layerの出力形状:               ", z_0.shape, "\n")
 
     # Multi-Head Self-Attentionの確認
     mhsa = MultiHeadSelfAttention()
     print(mhsa)
     out = mhsa(z_0) # (B, N, D)
-    print("Multi-Head Self-Attentionの出力形状: ", out.shape)
+    print("Multi-Head Self-Attentionの出力形状: ", out.shape, "\n")
+
+    # Encoder Blockの確認
+    vit_enc = VitEncoderBlock()
+    print(vit_enc)
+    z_1 = vit_enc(z_0)  # z_0は(B, N, D)
+    print("Encoder Blockの出力形状: ", z_1.shape, "\n")
