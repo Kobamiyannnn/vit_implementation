@@ -1,2 +1,4 @@
 Pipfile*
 venv/
+data/
+__pycache__/
