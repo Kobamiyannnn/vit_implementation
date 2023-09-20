@@ -5,6 +5,9 @@ from torchvision import datasets
 from torchvision.transforms import ToTensor
 from torchsummary import summary
 from vit import Vit
+import matplotlib.pyplot as plt
+import numpy as np
+
 
 ###################
 # データセットの用意 #
@@ -44,6 +47,19 @@ classes = [
     'truck'
 ]
 num_classes = len(classes)
+
+# 学習データの表示
+plt.figure(figsize=(15, 4))
+for i in range(10):
+    ax = plt.subplot(1, 10, i+1)
+    image, label = train_data[i]
+    img = image.permute(1, 2, 0)  # 軸の入れ替え (C,H,W) -> (H,W,C)
+    plt.imshow(img)
+    ax.set_title(classes[label], fontsize=16)
+    # 枠線消し
+    ax.get_xaxis().set_visible(False)
+    ax.get_yaxis().set_visible(False)
+plt.show()
 
 ##############
 # モデルの用意 #
