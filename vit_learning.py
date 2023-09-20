@@ -6,7 +6,6 @@ from torchvision.transforms import ToTensor
 from torchsummary import summary
 from vit import Vit
 import matplotlib.pyplot as plt
-import numpy as np
 
 
 ###################
@@ -49,13 +48,13 @@ classes = [
 num_classes = len(classes)
 
 # 学習データの表示
-plt.figure(figsize=(15, 4))
+plt.figure()
 for i in range(10):
-    ax = plt.subplot(1, 10, i+1)
+    ax = plt.subplot(2, 5, i+1)
     image, label = train_data[i]
     img = image.permute(1, 2, 0)  # 軸の入れ替え (C,H,W) -> (H,W,C)
     plt.imshow(img)
-    ax.set_title(classes[label], fontsize=16)
+    ax.set_title(classes[label])
     # 枠線消し
     ax.get_xaxis().set_visible(False)
     ax.get_yaxis().set_visible(False)
