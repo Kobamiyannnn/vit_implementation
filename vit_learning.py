@@ -71,8 +71,21 @@ device = (
     else "cpu"
 )
 print(f"Using {device} device")
+
+# 乱数シードの固定
+if device == "cuda":
+    torch.cuda.manual_seed(0)
+elif device == "mps":
+    torch.mps.manual_seed(0)
+
 vit = Vit(num_classes=num_classes).to(device)
-# summary(vit, (3, 32, 32), batch_size=2, device=device)  # モデルの構造確認
+
+# モデルの構造確認
+if device != "mps":
+    summary(vit, (3, 32, 32), batch_size=2, device=device)
+    print()
+else:
+    print(vit)
 
 loss_fn = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(
